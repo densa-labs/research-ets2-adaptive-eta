@@ -24,7 +24,7 @@ static SUPPORTED_GAMES: [GameCompatibility; 1] = [GameCompatibility::new(
     game::ets2::V1_12,
 )];
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct TelemetrySpike {
     assembler: LiveFrameAssembler,
     pipeline: DeterministicPipeline,
@@ -33,6 +33,22 @@ struct TelemetrySpike {
     input_ordinal: usize,
     capture_failure_reported: bool,
     callback_trace_failure_reported: bool,
+    paused: bool,
+}
+
+impl Default for TelemetrySpike {
+    fn default() -> Self {
+        Self {
+            assembler: LiveFrameAssembler::default(),
+            pipeline: DeterministicPipeline::default(),
+            capture: None,
+            callback_ordinal: 0,
+            input_ordinal: 0,
+            capture_failure_reported: false,
+            callback_trace_failure_reported: false,
+            paused: true,
+        }
+    }
 }
 
 impl TelemetrySpike {
@@ -192,6 +208,7 @@ impl TelemetryPlugin for TelemetrySpike {
         self.input_ordinal = 0;
         self.capture_failure_reported = false;
         self.callback_trace_failure_reported = false;
+        self.paused = true;
         self.capture = match DeveloperCapture::open_if_enabled() {
             Ok(capture) => capture,
             Err(error) => {
@@ -268,6 +285,15 @@ impl TelemetryPlugin for TelemetrySpike {
                 self.trace_callback(context, "frame_end");
                 match self.assembler.frame_end() {
                     Ok(emitted) => {
+                        if self.paused && !emitted.had_channel_callbacks {
+                            if matches!(
+                                emitted.input,
+                                RawInput::Frame(frame) if frame.timer_restart
+                            ) {
+                                self.process_input(context, RawInput::TimerRestart);
+                            }
+                            return;
+                        }
                         if let Some(diagnostic) = emitted.diagnostic {
                             Self::bridge_diagnostic(context, diagnostic);
                         }
@@ -278,10 +304,12 @@ impl TelemetryPlugin for TelemetrySpike {
             }
             TelemetryEvent::Paused => {
                 self.trace_callback(context, "paused");
+                self.paused = true;
                 self.process_input(context, RawInput::Paused);
             }
             TelemetryEvent::Started => {
                 self.trace_callback(context, "started");
+                self.paused = false;
                 self.process_input(context, RawInput::Started);
             }
             TelemetryEvent::Configuration(configuration_event) => {

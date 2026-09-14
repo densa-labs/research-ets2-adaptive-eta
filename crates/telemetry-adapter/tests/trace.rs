@@ -59,3 +59,21 @@ fn mismatch_reports_first_record_and_source_identity() {
     assert_eq!(mismatch.sequence, Some(1));
     assert_eq!(mismatch.surface, "step");
 }
+
+#[test]
+fn live_trace_parser_preserves_captured_difficult_float_exactly() {
+    let records = records();
+    let mut report = replay(&records).expect("records should replay");
+    let captured_value = 0.399_983_999_999_999_95_f64;
+    report.summary.adaptive_eta_sec = Some(captured_value);
+    let trace = LiveTrace::new(report);
+
+    let encoded = encode_live_trace(&trace).expect("trace should encode");
+    let decoded = decode_live_trace(&encoded).expect("trace should decode");
+
+    assert_eq!(decoded, trace);
+    assert_eq!(
+        decoded.report.summary.adaptive_eta_sec.map(f64::to_bits),
+        Some(captured_value.to_bits())
+    );
+}

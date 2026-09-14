@@ -12,10 +12,16 @@ game time, speed, odometer, navigation distance, and navigation time.
 
 At `frame_start`, the bridge opens a new frame containing the pause-aware SDK
 timestamp and timer-restart flag. Each channel callback updates only that open
-frame. At `frame_end`, exactly one `RawFrame` snapshot is emitted. Channel
-storage is reset at every frame start: an explicit SDK no-value is retained as
-`None`, while a callback missing altogether is also `None` but additionally
-raises an `IncompleteFrame` bridge diagnostic. No prior value is substituted.
+frame. At `frame_end`, one `RawFrame` snapshot is emitted when channel callbacks
+were delivered. Channel storage is reset at every frame start: an explicit SDK
+no-value is retained as `None`, while a callback missing from an otherwise
+active frame is also `None` and raises an `IncompleteFrame` diagnostic. No prior
+value is substituted.
+
+The real run showed that ETS2 emits frame pairs without any channel callbacks
+during startup/loading and while paused. Those expected empty frames are not
+`RawFrame` observations and are suppressed. A timer-restart flag on such a
+startup frame is retained as the existing `TimerRestart` lifecycle input.
 
 The callback order used by the plugin is therefore preserved as follows:
 
@@ -94,10 +100,12 @@ and typed diagnostics) and ordered core decisions. The equality surface also
 includes the summary, collected adapter diagnostics, final estimator state,
 factor/confidence/display values, and final adaptive ETA when defined.
 
-Trace version 1 serializes that report as JSON. Standard `serde_json` number
-encoding is tested through an exact `f64` round trip; parity uses Rust `PartialEq`
-without rounding or epsilon matching. Filenames, wall-clock creation time,
-process ID, and paths are outside the report and therefore outside equality.
+Trace version 1 serializes that report as JSON. `serde_json` uses its
+`float_roundtrip` parser so difficult computed `f64` values return with the
+same bits; this is covered by a captured-value regression test. Parity uses
+Rust `PartialEq` without rounding or epsilon matching. Filenames, wall-clock
+creation time, process ID, and paths are outside the report and therefore
+outside equality.
 
 Run parity after ETS2 shuts down cleanly and writes the trace:
 
@@ -129,9 +137,35 @@ is required.
 
 ## Evidence status
 
-Automated tests establish deterministic assembly, explicit unavailability,
-epoch/sequence behavior, lifecycle ordering, previous-scale interval ownership,
-JSON round-trip equality, and first-mismatch reporting. Actual callback order,
-pause placement, transient scale availability, navigation transitions,
-reroute/load behavior, and source shutdown still require the real ETS2 capture
-described above. Build success is not treated as live parity evidence.
+The first real capture contained 27,759 inputs and reached exact `MATCH` after
+enabling `serde_json`'s exact `float_roundtrip` parser. The initial comparison
+identified a one-ULP trace decode difference at input 386; the trace file and
+live computation were correct, and the parser feature plus a regression test
+fixed the representation loss without weakening equality.
+
+Observed callback structure was exact on all 23,032 active frames:
+
+```text
+frame_start
+local.scale
+game.time
+truck.speed
+truck.odometer
+truck.navigation.distance
+truck.navigation.time
+frame_end
+```
+
+Another 4,711 startup/paused frames contained no channel callbacks. No active
+partial frame, channel outside a frame, or nested/missing frame boundary was
+observed. Five paused events and five started events occurred between complete
+frames. The pause-aware timestamp stayed fixed during each pause and advanced
+16,666 microseconds on the first resumed frame. Active local scale was always
+available and changed ten times between 3 and 19, including rapid oscillation.
+Both navigation values were available together on every active frame. The run
+also exercised reroute-like navigation jumps, a same-session save load, job
+configuration changes, five accepted calibration samples, and clean source
+shutdown.
+
+The empty-paused-frame suppression derived from this evidence requires one
+short follow-up capture before the final bridge build is called live-validated.

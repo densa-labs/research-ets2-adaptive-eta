@@ -68,6 +68,7 @@ struct OpenFrame {
 pub struct EmittedFrame {
     pub input: RawInput,
     pub diagnostic: Option<BridgeDiagnostic>,
+    pub had_channel_callbacks: bool,
 }
 
 /// Pure SCS callback-to-`RawInput` frame assembler. Channel values are reset at
@@ -160,6 +161,7 @@ impl LiveFrameAssembler {
                 sequence: frame.sequence,
                 missing_mask,
             }),
+            had_channel_callbacks: frame.seen != 0,
         })
     }
 }
@@ -382,5 +384,25 @@ mod tests {
                 abandoned_sequence: 1
             })
         );
+    }
+
+    #[test]
+    fn empty_frame_is_distinguishable_from_explicit_no_values() {
+        let mut assembler = LiveFrameAssembler::default();
+        let _ = assembler.source_connected();
+        let _ = assembler.frame_start(FrameStart {
+            paused_simulation_time_us: 0,
+            timer_restart: true,
+        });
+        let empty = assembler.frame_end().expect("empty SDK frame");
+        assert!(!empty.had_channel_callbacks);
+
+        let _ = assembler.frame_start(FrameStart {
+            paused_simulation_time_us: 0,
+            timer_restart: false,
+        });
+        complete_frame(&mut assembler, None);
+        let explicit_no_value = assembler.frame_end().expect("channel callbacks occurred");
+        assert!(explicit_no_value.had_channel_callbacks);
     }
 }
