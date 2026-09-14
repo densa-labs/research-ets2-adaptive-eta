@@ -4,8 +4,8 @@
 
 Instead of relying on ETS2's generic travel-time assumptions, Adaptive ETA gradually learns from **your own trips** and produces a **personalized arrival estimate**.
 
-Adaptive ETA is available for **Windows, Linux, and macOS**.
-Adaptive ETA's **only** download source is **Steam Workshop** (<TODO: put link here>).
+Adaptive ETA is being developed for **Windows, Linux, and macOS**. <TODO: change "being developed" to "available" when released>
+<TODO: once path b is validated, here add "Adaptive ETA's **only** official download source is [Steam Workshop](*put the link here*)**.">
 
 # Installation
 ## Windows
@@ -27,4 +27,4 @@ To open the app,
 For settings, performance, diagnostics, repair, and uninstall options, open the **Adaptive ETA** app.
 
 # License
-MIT
+[MIT](LICENSE)
