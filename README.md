@@ -1,50 +1,30 @@
-# ETS2 Adaptive ETA — telemetry feasibility spike
+# Adaptive ETA
 
-This repository contains the completed disposable macOS telemetry probe and a
-standalone, platform-neutral calibration-engine prototype. It does not yet
-connect the two or implement the planned companion app.
+**Adaptive ETA** is a **mod** for **Euro Truck Simulator 2** that **learns your driving patterns** and **adjusts the Route Advisor ETA** to **match your driving style**, giving you a **more accurate travel time**.
 
-The probe logs one rate-limited sample every two rendering seconds through
-ETS2's SDK logger, plus immediate pause/start/timer and local-scale transition
-records. In a standard Steam installation the resulting output is in:
+Instead of relying on ETS2's generic travel-time assumptions, Adaptive ETA gradually learns from **your own trips** and produces a **personalized arrival estimate**.
 
-```text
-~/Library/Application Support/Euro Truck Simulator 2/game.log.txt
-```
+Adaptive ETA is available for **Windows, Linux, and macOS**.
+Adaptive ETA's **only** download source is **Steam Workshop** (<TODO: put link here>).
 
-Build and verify the plugin:
+# Installation
+## Windows
+<TODO: put installation instructions here when finalized>
+## Linux
+<TODO: put installation instructions here when finalized>
+## macOS
+<TODO: put installation instructions here when finalized>
+### MUST READ: For macOS users
+When installing, macOS will prompt a warning similar to: **"Adaptive ETA cannot be opened because it is from an unidentified developer."**
+To open the app,
+1. Open **System Settings** on your Mac.
+2. Click on **"Privacy & Security"** in the sidebar *(has a hand icon)*.
+3. Scroll down to the **Security** section.
+4. Look for a message related to the app, something like: **"Adaptive ETA was blocked from use because it is not from an identified developer."**
+5. Click **"Open Anyway"**.
+6. You may be prompted to enter your Mac's login password. Enter the password, then click **OK**.
 
-```bash
-rustup target add x86_64-apple-darwin
-scripts/build-macos-spike.sh
-```
+For settings, performance, diagnostics, repair, and uninstall options, open the **Adaptive ETA** app.
 
-Install it while ETS2 is fully closed:
-
-```bash
-scripts/install-macos-spike.sh
-```
-
-The installer writes only this filename and refuses to replace an existing
-file:
-
-```text
-Euro Truck Simulator 2.app/Contents/MacOS/plugins/
-libets2_adaptive_eta_telemetry_spike.dylib
-```
-
-Filter diagnostic records after a test session:
-
-```bash
-rg '\[adaptive-eta-spike\]' \
-  "$HOME/Library/Application Support/Euro Truck Simulator 2/game.log.txt"
-```
-
-The exact dependency is `scs-sdk-plugin = 0.1.1`, locked by `Cargo.lock`. That
-release was audited at upstream revision
-`16a439a0892235051634fd4f54de3d8ab104f6d0` against the official SCS SDK 1.14
-headers for every event, channel, value type, and flag used by this spike.
-
-See `SPIKE_RESULTS.md` for the experiment protocol and current evidence.
-See `CALIBRATION_ENGINE.md` for the focused core behavior and formulas.
-See `TELEMETRY_ADAPTER.md` for the normalized adapter and JSONL replay format.
+# License
+MIT
