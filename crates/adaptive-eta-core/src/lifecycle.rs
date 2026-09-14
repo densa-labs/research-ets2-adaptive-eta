@@ -1,4 +1,6 @@
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LifecycleEvent {
     SourceConnected {
         source_epoch: u64,
@@ -21,7 +23,7 @@ pub enum LifecycleEvent {
     AdapterRejectedInput,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BoundaryReason {
     SourceConnected,
     SourceDisconnected,

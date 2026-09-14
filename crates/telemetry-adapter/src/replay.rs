@@ -1,18 +1,19 @@
 use adaptive_eta_core::{
     CalibrationEngine, EngineInput, EngineOutput, EstimatorState, EstimatorView, SampleOutcome,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::adapter::{AdapterDiagnostic, AdapterOutput, TelemetryAdapter};
 use crate::record::{RecordError, VersionedRecord, decode_jsonl};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReplayStep {
     pub record_index: usize,
     pub adapter_outputs: Vec<AdapterOutput>,
     pub core_outputs: Vec<EngineOutput>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReplaySummary {
     pub records: usize,
     pub normalized_frames: usize,
@@ -45,12 +46,71 @@ impl Default for ReplaySummary {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReplayReport {
     pub summary: ReplaySummary,
     pub steps: Vec<ReplayStep>,
     pub adapter_diagnostics: Vec<AdapterDiagnostic>,
     pub final_estimator_state: EstimatorState,
+}
+
+/// Stateful deterministic execution path shared by live ingestion and replay.
+/// It does not read clocks or files; callers decide whether returned steps are
+/// retained as a trace.
+#[derive(Clone, Debug, Default)]
+pub struct DeterministicPipeline {
+    adapter: TelemetryAdapter,
+    engine: CalibrationEngine,
+    summary: ReplaySummary,
+    adapter_diagnostics: Vec<AdapterDiagnostic>,
+    latest_game_eta_sec: Option<f64>,
+}
+
+impl DeterministicPipeline {
+    #[must_use]
+    pub fn process(&mut self, record_index: usize, input: crate::raw::RawInput) -> ReplayStep {
+        self.summary.records += 1;
+        let adapter_outputs = self.adapter.process(input);
+        let mut core_outputs = Vec::new();
+        for output in &adapter_outputs {
+            match output {
+                AdapterOutput::Diagnostic(diagnostic) => {
+                    self.summary.adapter_diagnostics += 1;
+                    self.adapter_diagnostics.push(*diagnostic);
+                }
+                AdapterOutput::CoreInput(input) => {
+                    if let EngineInput::Frame(frame) = input {
+                        self.summary.normalized_frames += 1;
+                        self.latest_game_eta_sec = Some(frame.navigation_time_sec);
+                    }
+                    if let Some(core_output) = self.engine.process(*input) {
+                        update_summary(&mut self.summary, core_output);
+                        core_outputs.push(core_output);
+                    }
+                }
+            }
+        }
+        ReplayStep {
+            record_index,
+            adapter_outputs,
+            core_outputs,
+        }
+    }
+
+    #[must_use]
+    pub fn report(&self, steps: Vec<ReplayStep>) -> ReplayReport {
+        let mut summary = self.summary;
+        summary.final_estimator = self.engine.estimator().view();
+        summary.adaptive_eta_sec = self
+            .latest_game_eta_sec
+            .and_then(|game_eta| self.engine.estimator().adaptive_eta_sec(game_eta));
+        ReplayReport {
+            summary,
+            steps,
+            adapter_diagnostics: self.adapter_diagnostics.clone(),
+            final_estimator_state: self.engine.estimator().clone(),
+        }
+    }
 }
 
 /// Parses and immediately replays a JSONL recording without real-time delays.
@@ -79,53 +139,13 @@ pub fn replay(records: &[VersionedRecord]) -> Result<ReplayReport, RecordError> 
             found: record.record_version,
         });
     }
-    let mut adapter = TelemetryAdapter::default();
-    let mut engine = CalibrationEngine::default();
-    let mut summary = ReplaySummary {
-        records: records.len(),
-        ..ReplaySummary::default()
-    };
+    let mut pipeline = DeterministicPipeline::default();
     let mut steps = Vec::with_capacity(records.len());
-    let mut diagnostics = Vec::new();
-    let mut latest_game_eta_sec = None;
 
     for (record_index, record) in records.iter().enumerate() {
-        let adapter_outputs = adapter.process(record.input);
-        let mut core_outputs = Vec::new();
-        for output in &adapter_outputs {
-            match output {
-                AdapterOutput::Diagnostic(diagnostic) => {
-                    summary.adapter_diagnostics += 1;
-                    diagnostics.push(*diagnostic);
-                }
-                AdapterOutput::CoreInput(input) => {
-                    if let EngineInput::Frame(frame) = input {
-                        summary.normalized_frames += 1;
-                        latest_game_eta_sec = Some(frame.navigation_time_sec);
-                    }
-                    if let Some(core_output) = engine.process(*input) {
-                        update_summary(&mut summary, core_output);
-                        core_outputs.push(core_output);
-                    }
-                }
-            }
-        }
-        steps.push(ReplayStep {
-            record_index,
-            adapter_outputs,
-            core_outputs,
-        });
+        steps.push(pipeline.process(record_index, record.input));
     }
-
-    summary.final_estimator = engine.estimator().view();
-    summary.adaptive_eta_sec =
-        latest_game_eta_sec.and_then(|game_eta| engine.estimator().adaptive_eta_sec(game_eta));
-    Ok(ReplayReport {
-        summary,
-        steps,
-        adapter_diagnostics: diagnostics,
-        final_estimator_state: engine.estimator().clone(),
-    })
+    Ok(pipeline.report(steps))
 }
 
 fn update_summary(summary: &mut ReplaySummary, output: EngineOutput) {

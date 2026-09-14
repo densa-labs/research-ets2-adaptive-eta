@@ -1,8 +1,9 @@
 use crate::lifecycle::LifecycleEvent;
+use serde::{Deserialize, Serialize};
 
 /// One adapter-normalized observation. Both clocks are monotonic within a
 /// source epoch and exclude paused time.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TelemetryFrame {
     pub sequence: u64,
     pub source_epoch: u64,
@@ -43,7 +44,7 @@ impl TelemetryFrame {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum EngineInput {
     Frame(TelemetryFrame),
     Event(LifecycleEvent),

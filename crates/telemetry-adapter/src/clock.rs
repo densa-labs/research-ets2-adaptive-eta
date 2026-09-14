@@ -1,4 +1,6 @@
-#[derive(Clone, Copy, Debug, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ClockIssue {
     TimerRestart,
     TimestampRegression { previous_us: u64, current_us: u64 },
@@ -7,7 +9,7 @@ pub enum ClockIssue {
     PausedTimestampAdvanced { delta_us: u64 },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClockObservation {
     pub active_game_time_sec: f64,
     pub active_physical_time_sec: f64,

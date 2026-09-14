@@ -1,11 +1,12 @@
 use crate::confidence::confidence;
 use crate::diagnostics::UpdateDiagnostic;
+use serde::{Deserialize, Serialize};
 
 pub const MAX_SAMPLE_WEIGHT_KM: f64 = 12.5;
 pub const EWMA_DISTANCE_SCALE_KM: f64 = 250.0;
 pub const MAX_ALPHA: f64 = 0.05;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EstimatorView {
     pub learned_factor: f64,
     pub confidence: f64,
@@ -14,7 +15,7 @@ pub struct EstimatorView {
     pub valid_observed_distance_km: f64,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EstimatorState {
     log_factor: f64,
     valid_sample_count: u64,

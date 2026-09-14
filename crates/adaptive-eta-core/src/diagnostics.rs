@@ -1,6 +1,7 @@
 use crate::lifecycle::BoundaryReason;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SampleMetrics {
     pub start_navigation_distance_m: f64,
     pub end_navigation_distance_m: f64,
@@ -17,7 +18,7 @@ pub struct SampleMetrics {
     pub raw_ratio: Option<f64>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RejectionReason {
     InvalidNumber,
     NonPositiveDistance,
@@ -28,14 +29,14 @@ pub enum RejectionReason {
     Outlier,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SampleOutcome {
     AcceptedUnchanged { ratio: f64 },
     AcceptedBounded { raw_ratio: f64, bounded_ratio: f64 },
     Rejected { reason: RejectionReason },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UpdateDiagnostic {
     pub applied_ratio: f64,
     pub weight_km: f64,
@@ -44,14 +45,14 @@ pub struct UpdateDiagnostic {
     pub new_factor: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SampleDecision {
     pub metrics: SampleMetrics,
     pub outcome: SampleOutcome,
     pub update: Option<UpdateDiagnostic>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BoundaryDiagnostic {
     pub reason: BoundaryReason,
     pub discarded_open_window: bool,
@@ -59,7 +60,7 @@ pub struct BoundaryDiagnostic {
     pub discarded_metrics: Option<SampleMetrics>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum EngineOutput {
     Boundary(BoundaryDiagnostic),
     AnchorEstablished { sequence: u64 },

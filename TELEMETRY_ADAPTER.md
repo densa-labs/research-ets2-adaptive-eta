@@ -1,8 +1,10 @@
 # Normalized telemetry adapter and replay harness
 
-This milestone connects raw-ish SCS telemetry concepts to `adaptive-eta-core`
-without adding a live transport. It is an offline/developer interface, not the
-production plugin protocol.
+This crate connects raw-ish SCS telemetry concepts to `adaptive-eta-core` and
+is shared by offline replay and the developer live-integration spike. It is not
+the production plugin protocol. The SCS callback mapping, capture activation,
+and exact live/replay comparison workflow are documented in
+`LIVE_ADAPTER_SPIKE.md`.
 
 ## Adapter contract
 
@@ -80,6 +82,15 @@ or reads a clock. A developer can inspect a fixture with:
 ```bash
 cargo run -p telemetry-adapter --bin replay -- \
   crates/telemetry-adapter/tests/fixtures/normal_drive.jsonl
+```
+
+`DeterministicPipeline` is the common stateful collector used by both live
+ingestion and `replay`. A versioned structured live trace serializes the exact
+typed `ReplayReport` equality surface. Compare a live capture and its paired
+trace with:
+
+```bash
+cargo run -p telemetry-adapter --bin parity -- CAPTURE.jsonl LIVE_TRACE.json
 ```
 
 The seven committed fixtures are synthetic normalized recordings. Reroute and

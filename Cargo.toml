@@ -15,9 +15,11 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+adaptive-eta-core = { path = "crates/adaptive-eta-core" }
 # Exact crates.io release corresponding to the source revision audited for this
 # spike: 16a439a0892235051634fd4f54de3d8ab104f6d0.
 scs-sdk-plugin = "=0.1.1"
+telemetry-adapter = { path = "crates/telemetry-adapter" }
 
 [profile.release]
 codegen-units = 1

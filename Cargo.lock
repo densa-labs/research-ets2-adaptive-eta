@@ -5,12 +5,17 @@ version = 4
 [[package]]
 name = "adaptive-eta-core"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "ets2-adaptive-eta-telemetry-spike"
 version = "0.1.0"
 dependencies = [
+ "adaptive-eta-core",
  "scs-sdk-plugin",
+ "telemetry-adapter",
 ]
 
 [[package]]

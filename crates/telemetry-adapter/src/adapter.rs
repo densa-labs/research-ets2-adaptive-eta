@@ -1,9 +1,10 @@
 use adaptive_eta_core::{EngineInput, LifecycleEvent, TelemetryFrame};
+use serde::{Deserialize, Serialize};
 
 use crate::clock::{ClockIssue, IntervalClock};
 use crate::raw::{RawFrame, RawInput};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum AdapterDiagnosticKind {
     Clock(ClockIssue),
     SourceEpochChanged { previous: u64, current: u64 },
@@ -16,14 +17,14 @@ pub enum AdapterDiagnosticKind {
     InvalidSpeed { value: f64 },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AdapterDiagnostic {
     pub source_epoch: Option<u64>,
     pub sequence: Option<u64>,
     pub kind: AdapterDiagnosticKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum AdapterOutput {
     CoreInput(EngineInput),
     Diagnostic(AdapterDiagnostic),
