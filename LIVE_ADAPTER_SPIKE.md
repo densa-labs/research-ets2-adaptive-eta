@@ -167,5 +167,20 @@ also exercised reroute-like navigation jumps, a same-session save load, job
 configuration changes, five accepted calibration samples, and clean source
 shutdown.
 
-The empty-paused-frame suppression derived from this evidence requires one
-short follow-up capture before the final bridge build is called live-validated.
+The corrected build then completed a follow-up capture with exact parity:
+
+```text
+MATCH records=7812
+```
+
+That capture contained 7,801 emitted `RawFrame` values, all with the complete
+six-channel callback sequence and paired navigation availability. The callback
+trace also contained 2,369 channel-less startup/paused frame pairs; all were
+suppressed as intended, producing sequence gaps that remained safe across the
+explicit lifecycle boundaries. No empty raw frame, bridge diagnostic, adapter
+diagnostic, capture failure, or callback-order anomaly occurred. Two accepted
+calibration samples were produced and shutdown finalized the trace cleanly.
+
+The live adapter/replay-parity milestone is therefore validated for the
+documented deterministic equality surface. Remaining work belongs to the next
+production integration/transport milestone rather than this developer spike.
