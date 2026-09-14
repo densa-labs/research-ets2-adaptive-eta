@@ -1,0 +1,8 @@
+{"recordVersion":1,"input":{"type":"source_connected","data":{"sourceEpoch":1}}}
+{"recordVersion":1,"input":{"type":"frame","data":{"sourceEpoch":1,"sequence":1,"pausedSimulationTimeUs":0,"localScale":60.0,"gameTimeMinutes":100,"navigationDistanceM":100000.0,"navigationTimeSec":10000.0,"speedMps":0.0,"odometerKm":1000.0}}}
+{"recordVersion":1,"input":{"type":"frame","data":{"sourceEpoch":1,"sequence":2,"pausedSimulationTimeUs":5000000,"localScale":60.0,"gameTimeMinutes":105,"navigationDistanceM":100000.0,"navigationTimeSec":10000.0,"speedMps":0.0,"odometerKm":1000.0}}}
+{"recordVersion":1,"input":{"type":"frame","data":{"sourceEpoch":1,"sequence":3,"pausedSimulationTimeUs":7000000,"localScale":60.0,"gameTimeMinutes":107,"navigationDistanceM":96000.0,"navigationTimeSec":9866.666666666666,"speedMps":20.0,"odometerKm":1004.0}}}
+{"recordVersion":1,"input":{"type":"source_connected","data":{"sourceEpoch":2}}}
+{"recordVersion":1,"input":{"type":"frame","data":{"sourceEpoch":2,"sequence":1,"pausedSimulationTimeUs":0,"localScale":60.0,"gameTimeMinutes":200,"navigationDistanceM":50000.0,"navigationTimeSec":5000.0,"speedMps":0.0,"odometerKm":2000.0}}}
+{"recordVersion":1,"input":{"type":"frame","data":{"sourceEpoch":2,"sequence":2,"pausedSimulationTimeUs":5000000,"localScale":60.0,"gameTimeMinutes":205,"navigationDistanceM":50000.0,"navigationTimeSec":5000.0,"speedMps":0.0,"odometerKm":2000.0}}}
+{"recordVersion":1,"input":{"type":"frame","data":{"sourceEpoch":2,"sequence":3,"pausedSimulationTimeUs":9000000,"localScale":60.0,"gameTimeMinutes":209,"navigationDistanceM":42000.0,"navigationTimeSec":4733.333333333333,"speedMps":20.0,"odometerKm":2008.0}}}

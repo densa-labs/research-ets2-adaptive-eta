@@ -1,0 +1,4 @@
+{"recordVersion":1,"input":{"type":"source_connected","data":{"sourceEpoch":1}}}
+{"recordVersion":1,"input":{"type":"frame","data":{"sourceEpoch":1,"sequence":1,"pausedSimulationTimeUs":0,"localScale":3.0,"gameTimeMinutes":100,"navigationDistanceM":100000.0,"navigationTimeSec":10000.0,"speedMps":0.0,"odometerKm":1000.0}}}
+{"recordVersion":1,"input":{"type":"frame","data":{"sourceEpoch":1,"sequence":2,"pausedSimulationTimeUs":5000000,"localScale":60.0,"gameTimeMinutes":100,"navigationDistanceM":100000.0,"navigationTimeSec":10000.0,"speedMps":0.0,"odometerKm":1000.0}}}
+{"recordVersion":1,"input":{"type":"frame","data":{"sourceEpoch":1,"sequence":3,"pausedSimulationTimeUs":9000000,"localScale":19.0,"gameTimeMinutes":104,"navigationDistanceM":92000.0,"navigationTimeSec":9733.333333333334,"speedMps":20.0,"odometerKm":1008.0}}}

@@ -15,6 +15,10 @@ pub enum LifecycleEvent {
     TrainUsed,
     /// Supplied by an adapter when it can identify a load/restart operation.
     LoadOrRestart,
+    /// Timing integration could not safely bridge a raw telemetry interval.
+    TimingDiscontinuity,
+    /// A source adapter rejected malformed required telemetry.
+    AdapterRejectedInput,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,6 +45,7 @@ pub enum BoundaryReason {
     OdometerRegressed,
     ProgressMismatch,
     LongStationary,
+    TimingDiscontinuity,
 }
 
 impl LifecycleEvent {
@@ -59,6 +64,8 @@ impl LifecycleEvent {
             Self::FerryUsed => BoundaryReason::FerryUsed,
             Self::TrainUsed => BoundaryReason::TrainUsed,
             Self::LoadOrRestart => BoundaryReason::LoadOrRestart,
+            Self::TimingDiscontinuity => BoundaryReason::TimingDiscontinuity,
+            Self::AdapterRejectedInput => BoundaryReason::InvalidTelemetry,
         }
     }
 }

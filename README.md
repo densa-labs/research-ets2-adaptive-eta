@@ -47,3 +47,4 @@ headers for every event, channel, value type, and flag used by this spike.
 
 See `SPIKE_RESULTS.md` for the experiment protocol and current evidence.
 See `CALIBRATION_ENGINE.md` for the focused core behavior and formulas.
+See `TELEMETRY_ADAPTER.md` for the normalized adapter and JSONL replay format.

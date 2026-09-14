@@ -5,8 +5,8 @@ edition = "2024"
 publish = false
 
 [workspace]
-members = ["crates/adaptive-eta-core"]
-default-members = [".", "crates/adaptive-eta-core"]
+members = ["crates/adaptive-eta-core", "crates/telemetry-adapter"]
+default-members = [".", "crates/adaptive-eta-core", "crates/telemetry-adapter"]
 resolver = "3"
 
 [lib]
