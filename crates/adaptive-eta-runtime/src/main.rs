@@ -1,39 +1,36 @@
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::io;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::path::PathBuf;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::time::{Duration, Instant};
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use adaptive_eta_runtime::RuntimeProcessor;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use telemetry_adapter::{LiveTrace, encode_live_trace};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use telemetry_transport::{Endpoint, ProtocolError, ReceiveError, Receiver};
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn main() {
     eprintln!("Adaptive ETA local transport backend is not implemented for this platform yet");
     std::process::exit(1);
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trace_path = parse_trace_path()?;
     install_signal_handlers();
     let endpoint = Endpoint::for_current_user()?;
-    let receiver = Receiver::bind(endpoint)?;
+    let mut receiver = Receiver::bind(endpoint)?;
     receiver.set_read_timeout(Some(Duration::from_secs(1)))?;
-    println!(
-        "waiting for telemetry endpoint={}",
-        receiver.endpoint().socket_path().display()
-    );
+    println!("waiting for telemetry endpoint={}", receiver.endpoint());
 
     let mut runtime = RuntimeProcessor::new(trace_path.is_some());
     let mut receiving = false;
@@ -82,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn parse_trace_path() -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
     let mut arguments = std::env::args_os().skip(1);
     let Some(argument) = arguments.next() else {
@@ -98,7 +95,7 @@ fn parse_trace_path() -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
     Ok(Some(path.into()))
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn print_status(snapshot: adaptive_eta_runtime::RuntimeSnapshot) {
     let estimator = snapshot.summary.final_estimator;
     println!(
@@ -116,7 +113,7 @@ fn print_status(snapshot: adaptive_eta_runtime::RuntimeSnapshot) {
     );
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn format_seconds(value: Option<f64>) -> String {
     value.map_or_else(
         || "unavailable".to_owned(),
@@ -124,7 +121,7 @@ fn format_seconds(value: Option<f64>) -> String {
     )
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn is_timeout(error: &io::Error) -> bool {
     matches!(
         error.kind(),
@@ -135,6 +132,26 @@ fn is_timeout(error: &io::Error) -> bool {
 #[cfg(unix)]
 extern "C" fn request_shutdown(_: i32) {
     SHUTDOWN.store(true, Ordering::Relaxed);
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn request_shutdown(control: u32) -> i32 {
+    if matches!(control, 0..=2) {
+        SHUTDOWN.store(true, Ordering::Relaxed);
+        1
+    } else {
+        0
+    }
+}
+
+#[cfg(windows)]
+fn install_signal_handlers() {
+    // SAFETY: the handler performs only a lock-free atomic store and remains
+    // available for the process lifetime.
+    unsafe {
+        let _ =
+            windows_sys::Win32::System::Console::SetConsoleCtrlHandler(Some(request_shutdown), 1);
+    }
 }
 
 #[cfg(unix)]

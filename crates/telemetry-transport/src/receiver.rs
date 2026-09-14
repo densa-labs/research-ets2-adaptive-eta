@@ -2,24 +2,7 @@ use std::io;
 use std::os::unix::net::UnixDatagram;
 use std::time::Duration;
 
-use crate::{Endpoint, EndpointError, Envelope, MAX_PACKET_SIZE, ProtocolError, decode};
-
-#[derive(Debug)]
-pub enum ReceiveError {
-    Io(io::Error),
-    Protocol(ProtocolError),
-}
-
-impl std::fmt::Display for ReceiveError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Io(error) => error.fmt(formatter),
-            Self::Protocol(error) => error.fmt(formatter),
-        }
-    }
-}
-
-impl std::error::Error for ReceiveError {}
+use crate::{Endpoint, EndpointError, Envelope, MAX_PACKET_SIZE, ReceiveError, decode};
 
 #[derive(Debug)]
 pub struct Receiver {
@@ -71,7 +54,7 @@ impl Receiver {
     ///
     /// Returns a typed I/O or bounded protocol error. A datagram larger than the
     /// protocol limit is read into one extra byte and rejected as oversized.
-    pub fn receive(&self) -> Result<Envelope, ReceiveError> {
+    pub fn receive(&mut self) -> Result<Envelope, ReceiveError> {
         let mut buffer = [0_u8; MAX_PACKET_SIZE + 1];
         let size = self.socket.recv(&mut buffer).map_err(ReceiveError::Io)?;
         decode(&buffer[..size]).map_err(ReceiveError::Protocol)
@@ -133,7 +116,7 @@ mod tests {
     #[test]
     fn real_unix_datagram_round_trip_has_private_permissions() {
         let (base, endpoint) = isolated_endpoint();
-        let Some(receiver) = bind_or_skip(endpoint.clone()) else {
+        let Some(mut receiver) = bind_or_skip(endpoint.clone()) else {
             cleanup(&base);
             return;
         };
@@ -206,7 +189,7 @@ mod tests {
     #[test]
     fn receiver_interruption_becomes_an_observable_ordinal_gap() {
         let (base, endpoint) = isolated_endpoint();
-        let Some(first_receiver) = bind_or_skip(endpoint.clone()) else {
+        let Some(mut first_receiver) = bind_or_skip(endpoint.clone()) else {
             cleanup(&base);
             return;
         };
@@ -222,7 +205,8 @@ mod tests {
             publisher.publish(RawInput::Paused),
             PublishOutcome::DroppedReceiverAbsent { ordinal: 2 }
         ));
-        let second_receiver = bind_or_skip(endpoint).expect("socket support already established");
+        let mut second_receiver =
+            bind_or_skip(endpoint).expect("socket support already established");
         assert!(matches!(
             publisher.publish(RawInput::Started),
             PublishOutcome::Sent { ordinal: 3, .. }

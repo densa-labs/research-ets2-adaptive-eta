@@ -46,6 +46,12 @@ impl std::fmt::Display for EndpointError {
 
 impl std::error::Error for EndpointError {}
 
+impl std::fmt::Display for Endpoint {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.socket.display().fmt(formatter)
+    }
+}
+
 impl From<io::Error> for EndpointError {
     fn from(value: io::Error) -> Self {
         Self::Io(value)

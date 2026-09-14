@@ -22,6 +22,7 @@ use scs_sdk_plugin::{
 use telemetry_adapter::RawInput;
 #[cfg(feature = "developer-parity")]
 use telemetry_adapter::{AdapterOutput, DeterministicPipeline};
+#[cfg(any(unix, windows))]
 use telemetry_transport::{Endpoint, Publisher};
 
 static SUPPORTED_GAMES: [GameCompatibility; 1] = [GameCompatibility::new(
@@ -32,6 +33,7 @@ static SUPPORTED_GAMES: [GameCompatibility; 1] = [GameCompatibility::new(
 #[derive(Debug)]
 struct TelemetrySpike {
     assembler: LiveFrameAssembler,
+    #[cfg(any(unix, windows))]
     publisher: Option<Publisher>,
     #[cfg(feature = "developer-parity")]
     pipeline: DeterministicPipeline,
@@ -52,6 +54,7 @@ impl Default for TelemetrySpike {
     fn default() -> Self {
         Self {
             assembler: LiveFrameAssembler::default(),
+            #[cfg(any(unix, windows))]
             publisher: None,
             #[cfg(feature = "developer-parity")]
             pipeline: DeterministicPipeline::default(),
@@ -72,6 +75,10 @@ impl Default for TelemetrySpike {
 
 impl TelemetrySpike {
     fn process_input(&mut self, context: &PluginContext<'_>, input: RawInput) {
+        #[cfg(not(feature = "developer-parity"))]
+        let _ = context;
+        #[cfg(all(not(any(unix, windows)), not(feature = "developer-parity")))]
+        let _ = input;
         #[cfg(feature = "developer-parity")]
         if let Some(capture) = &mut self.capture
             && let Err(error) = capture.record_input(input)
@@ -107,8 +114,11 @@ impl TelemetrySpike {
             }
         }
 
-        if let Some(publisher) = &mut self.publisher {
-            let _ = publisher.publish(input);
+        #[cfg(any(unix, windows))]
+        {
+            if let Some(publisher) = &mut self.publisher {
+                let _ = publisher.publish(input);
+            }
         }
     }
 
@@ -127,6 +137,7 @@ impl TelemetrySpike {
     }
 
     #[cfg(not(feature = "developer-parity"))]
+    #[allow(clippy::unused_self)]
     fn trace_callback(&mut self, _: &PluginContext<'_>, _: &str) {}
 
     #[cfg(feature = "developer-parity")]
@@ -137,6 +148,7 @@ impl TelemetrySpike {
     }
 
     #[cfg(not(feature = "developer-parity"))]
+    #[allow(clippy::unused_self)]
     const fn callback_trace_enabled(&self) -> bool {
         false
     }
@@ -231,6 +243,7 @@ impl TelemetrySpike {
     }
 
     #[cfg(not(feature = "developer-parity"))]
+    #[allow(clippy::unused_self)]
     fn finish_capture(&mut self, _: &PluginContext<'_>) {}
 }
 
@@ -247,25 +260,32 @@ impl TelemetryPlugin for TelemetrySpike {
     }
 
     fn initialize(&mut self, context: &mut PluginContext<'_>) -> PluginResult {
-        self.publisher = match Endpoint::for_current_user().and_then(Publisher::new) {
-            Ok(publisher) => {
-                context.message(format_args!(
-                    "[adaptive-eta] transportReady sender={} endpoint={}",
-                    publisher.sender(),
-                    Endpoint::for_current_user().map_or_else(
-                        |_| "unavailable".to_owned(),
-                        |endpoint| endpoint.socket_path().display().to_string()
-                    )
-                ));
-                Some(publisher)
-            }
-            Err(error) => {
-                context.error(format_args!(
-                    "[adaptive-eta] transportUnavailable error={error}"
-                ));
-                None
-            }
-        };
+        #[cfg(any(unix, windows))]
+        {
+            self.publisher = match Endpoint::for_current_user().and_then(Publisher::new) {
+                Ok(publisher) => {
+                    context.message(format_args!(
+                        "[adaptive-eta] transportReady sender={} endpoint={}",
+                        publisher.sender(),
+                        Endpoint::for_current_user().map_or_else(
+                            |_| "unavailable".to_owned(),
+                            |endpoint| endpoint.to_string()
+                        )
+                    ));
+                    Some(publisher)
+                }
+                Err(error) => {
+                    context.error(format_args!(
+                        "[adaptive-eta] transportUnavailable error={error}"
+                    ));
+                    None
+                }
+            };
+        }
+        #[cfg(not(any(unix, windows)))]
+        context.error(format_args!(
+            "[adaptive-eta] transportUnavailable error=platform backend not implemented"
+        ));
         #[cfg(feature = "developer-parity")]
         {
             self.pipeline = DeterministicPipeline::default();
@@ -433,8 +453,9 @@ impl TelemetryPlugin for TelemetrySpike {
         self.trace_callback(context, "source_disconnected");
         self.process_input(context, RawInput::SourceDisconnected);
         self.finish_capture(context);
+        #[cfg(any(unix, windows))]
         if let Some(publisher) = self.publisher.take() {
-            let counters = publisher.counters();
+            let counters = publisher.shutdown();
             context.message(format_args!(
                 "[adaptive-eta] transportSummary attempted={} sent={} bytes={} maxPacket={} wouldBlock={} receiverAbsent={} serializationFailures={} otherFailures={}",
                 counters.attempted,

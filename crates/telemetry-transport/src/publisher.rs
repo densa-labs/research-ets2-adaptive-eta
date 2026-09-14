@@ -3,28 +3,10 @@ use std::os::unix::net::UnixDatagram;
 
 use telemetry_adapter::RawInput;
 
-use crate::{Endpoint, EndpointError, Envelope, MAX_PACKET_SIZE, SenderInstance, encode};
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct PublishCounters {
-    pub attempted: u64,
-    pub successful: u64,
-    pub successful_bytes: u64,
-    pub maximum_packet_bytes: usize,
-    pub would_block_drops: u64,
-    pub receiver_absent_drops: u64,
-    pub serialization_failures: u64,
-    pub other_failures: u64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PublishOutcome {
-    Sent { ordinal: u64, bytes: usize },
-    DroppedWouldBlock { ordinal: u64 },
-    DroppedReceiverAbsent { ordinal: u64 },
-    SerializationFailed { ordinal: u64 },
-    OtherFailure { ordinal: u64, kind: io::ErrorKind },
-}
+use crate::{
+    Endpoint, EndpointError, Envelope, MAX_PACKET_SIZE, PublishCounters, PublishOutcome,
+    SenderInstance, encode,
+};
 
 #[derive(Debug)]
 pub struct Publisher {
@@ -62,6 +44,11 @@ impl Publisher {
 
     #[must_use]
     pub const fn counters(&self) -> PublishCounters {
+        self.counters
+    }
+
+    #[must_use]
+    pub fn shutdown(self) -> PublishCounters {
         self.counters
     }
 
@@ -118,7 +105,7 @@ impl Publisher {
     }
 }
 
-fn receiver_is_absent(error: &io::Error) -> bool {
+fn receiver_is_absent(error: &std::io::Error) -> bool {
     matches!(
         error.kind(),
         io::ErrorKind::NotFound

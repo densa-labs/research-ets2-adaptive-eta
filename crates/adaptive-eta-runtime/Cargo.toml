@@ -9,6 +9,12 @@ adaptive-eta-core = { path = "../adaptive-eta-core" }
 telemetry-adapter = { path = "../telemetry-adapter" }
 telemetry-transport = { path = "../telemetry-transport" }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Console",
+] }
+
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 

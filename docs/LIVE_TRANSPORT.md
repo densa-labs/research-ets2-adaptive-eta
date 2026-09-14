@@ -17,10 +17,9 @@ Persistence, profile identity, management UI, overlay, installation lifecycle,
 and ETA-accuracy history are deliberately not part of this boundary.
 
 The protocol, continuity tracker, and runtime processor are shared Rust. The
-implemented platform backend is Unix-domain datagrams for macOS and Linux.
-Windows remains a first-class target, but its native local-IPC backend is not
-implemented or validated by this macOS milestone; the crate boundary keeps that
-backend replaceable without changing the wire envelope or estimator pipeline.
+platform backends are Unix-domain datagrams on macOS/Linux and Windows named
+pipes on Windows. Both feed the same binary decoder and continuity tracker;
+neither adapter nor calibration code contains platform transport behavior.
 
 ## Ownership
 
@@ -117,6 +116,75 @@ is logged only at plugin shutdown.
 Because the ordinal advances before every attempted send, a later successful
 packet exposes all callback-side drops to the receiver.
 
+## Windows endpoint and security
+
+The Windows endpoint is one named pipe scoped to the current Windows user SID
+and logon session:
+
+```text
+\\.\pipe\DensaLabs.AdaptiveETA.Telemetry.v1.<user SID>.session-<session ID>
+```
+
+The SID and session ID are read from the current process token and Windows
+session APIs. They are deterministic in both the ETS2 process and companion
+runtime without a configuration file, while separating unrelated users and
+concurrent Terminal Services sessions.
+
+The runtime creates exactly one message-mode pipe instance with
+`FILE_FLAG_FIRST_PIPE_INSTANCE` and `PIPE_REJECT_REMOTE_CLIENTS`. Its protected
+DACL grants full access only to the current user SID and Local System. The
+handle is non-inheritable. A second runtime cannot replace an active receiver;
+when the owning process exits, Windows removes the pipe instance, so no
+filesystem-style stale endpoint remains.
+
+The plugin does not trust the pipe name alone. After opening a server, its
+transport worker obtains the named-pipe server process ID and verifies that the
+server process token has the expected user SID and session ID. A pipe created by
+another logged-in user is closed and rejected even if that process deliberately
+uses the expected textual name. Normal creation and use require no elevation.
+
+## Windows plugin hot path and loss policy
+
+The Windows callback path never calls `CreateFileW`, `WaitNamedPipe`,
+`WriteFile`, a wait API, or reconnect logic. For every `RawInput` it:
+
+1. reserves the next transport ordinal;
+2. encodes protocol v1 into the publisher's reusable 128-byte buffer;
+3. copies the fixed packet into a single preallocated `sync_channel(1)` slot
+   using `try_send`;
+4. updates in-memory counters and returns immediately.
+
+There is one process-lifetime transport worker, not one worker per connection.
+The single-slot handoff is the complete user-space queue: it cannot grow. If the
+slot is occupied, the current publication is dropped immediately as
+would-block. Ordinals advance before the handoff, so later delivery exposes the
+drop exactly as on Unix.
+
+The worker owns connection and reconnection. It never calls `WaitNamedPipe` and
+does not run a retry or sleep loop. When a packet arrives with no open pipe, it
+makes one `CreateFileW` attempt; absent/busy endpoints count as receiver-absent
+and that packet is dropped. Later packets independently permit late runtime
+attachment. Connected writes use overlapped I/O with a fixed 20 ms worker-only
+deadline. A write that cannot complete is cancelled and observed before its
+stack packet is released. The worker has no access to SCS state and can block
+neither telemetry callbacks nor frame assembly.
+
+The runtime creates a message-mode pipe, preserving one protocol packet per
+native message without byte-stream framing. Its kernel inbound buffer request
+is a bounded 4 KiB. The runtime uses overlapped connect/read operations with the
+existing one-second idle timeout. It reads into exactly `MAX_PACKET_SIZE + 1`
+bytes; the extra byte detects oversized messages. Truncated, oversized,
+malformed, and unsupported-version messages flow to the same shared protocol
+errors as Unix. An oversized message disconnects that client so an unread tail
+cannot be confused with another packet.
+
+When a runtime exits, a connected worker observes a broken pipe, drops the
+affected ordinal, and returns to disconnected state. A later runtime accepts a
+new connection. When a plugin exits, the runtime observes the client disconnect
+and resumes listening on the same server handle. A new plugin has a new sender
+instance, so the shared tracker emits `NewSender`. There is no transport-level
+session inference or platform-specific timestamping.
+
 ## Continuity and recovery
 
 Sequential ordinals from the current sender are accepted. A duplicate is
@@ -139,7 +207,7 @@ and cannot continue the previous window.
 
 ## Runtime operation and observability
 
-Run the host-native Unix companion manually:
+Run the host-native companion manually:
 
 ```bash
 cargo run -p adaptive-eta-runtime
@@ -152,8 +220,10 @@ count, stock/adaptive ETA when available, display factor, confidence, accepted
 sample count, and detected missing transport messages. Idle, continuity,
 malformed, unsupported-version, and clean-shutdown states are distinct.
 
-SIGINT or SIGTERM requests a clean shutdown and socket cleanup. Abrupt process
-termination is recovered by stale-endpoint handling on the next start.
+On Unix, SIGINT or SIGTERM requests a clean shutdown and socket cleanup. On
+Windows, console Ctrl+C/Ctrl+Break/close requests the same clean runtime exit.
+Abrupt Unix termination is recovered by stale-endpoint handling; abrupt Windows
+termination releases the named-pipe kernel object automatically.
 
 No raw telemetry is stored by default. For a bounded developer parity run only,
 the runtime can retain and write the existing structured trace equality surface:
@@ -188,6 +258,44 @@ active/stale endpoints, gap-to-core boundary behavior, and recovery. The real
 socket exercises may report a skip in a sandbox that forbids Unix socket
 creation; run them outside that sandbox for OS-level evidence.
 
+### Native Windows validation
+
+On a native 64-bit Windows host with the Rust MSVC target/toolchain installed:
+
+```powershell
+cargo test -p telemetry-transport --all-features --target x86_64-pc-windows-msvc
+cargo test -p adaptive-eta-runtime --all-features --target x86_64-pc-windows-msvc
+cargo build --release --target x86_64-pc-windows-msvc
+cargo clippy --workspace --all-targets --all-features --target x86_64-pc-windows-msvc -- -D warnings
+```
+
+The Windows-only transport suite exercises:
+
+```text
+W1 receiver first and complete message delivery
+W2 publisher first, receiver absent, and late attachment
+W3 receiver restart and observable ordinal gap
+W4 publisher restart and NewSender
+W5 100,000 callback publications through the bounded handoff
+W6 truncated, bad-magic, oversized, unsupported-version, duplicate,
+   out-of-order, and ordinal-gap input
+single-active-receiver enforcement and endpoint release on shutdown
+```
+
+For real ETS2 validation, install the resulting CDylib from
+`target\x86_64-pc-windows-msvc\release` into a test ETS2
+`bin\win_x64\plugins` directory under the eventual product filename
+`AdaptiveETA.dll`. Repeat transport Tests A-D with the Windows runtime and use
+the existing developer parity capture/trace flow for exact Test E equality.
+Artifact renaming and installation lifecycle remain packaging work, not part of
+the transport crate.
+
+Cross-target checking proves Windows API and type selection only. A native MSVC
+linker is still required to produce the DLL and runtime executable. Until the
+Windows-only suite and ETS2 are actually executed on Windows, native named-pipe
+behavior and live SCS loading remain explicitly pending rather than inferred
+from a target check.
+
 ## Future persistence boundary
 
 The next milestone may load estimator state before runtime ingestion and save
@@ -195,10 +303,8 @@ accepted estimator changes after processing. It must not require changes to the
 plugin, wire protocol, callback assembler, adapter timing semantics, or core
 calibration mathematics.
 
-Remaining live risks are the behavior of the socket send buffer under sustained
-receiver starvation, real callback-path cost in ETS2, exact clean transported
-parity, and observed reacquisition across intentional runtime/game restarts.
-Those require the Tests A-E live protocol; automated evidence alone does not
-claim the production path is fully live-validated. The Windows local-transport
-backend and Windows/Linux target builds also remain explicit platform work; no
-Windows or Linux validation is claimed here.
+The Unix backend has completed real ETS2 Tests A-E on macOS, including exact
+`MATCH records=7556`. The Windows backend is implemented and can be
+cross-compiled from macOS, but its Windows-only tests and real ETS2 loading must
+still be run on a native Windows environment. Linux target compilation is not
+equivalent to native Linux socket or ETS2 execution either.
