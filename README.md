@@ -4,7 +4,8 @@
 
 Instead of relying on ETS2's generic travel-time assumptions, Adaptive ETA gradually learns from **your own trips** and produces a **personalized arrival estimate**.
 
-Adaptive ETA is being developed for **Windows, Linux, and macOS**. <TODO: change "being developed" to "available" when released>
+Adaptive ETA is being developed for **Windows, Linux, and macOS**. 
+<TODO: change "being developed" to "available" when released>
 <TODO: once path b is validated, here add "Adaptive ETA's **only** official download source is [Steam Workshop](*put the link here*)**.">
 
 # Installation
@@ -15,7 +16,7 @@ Adaptive ETA is being developed for **Windows, Linux, and macOS**. <TODO: change
 ## macOS
 <TODO: put installation instructions here when finalized>
 ### MUST READ: For macOS users
-When installing, macOS will prompt a warning similar to: **"Adaptive ETA cannot be opened because it is from an unidentified developer."**
+When installing, macOS will prompt a warning similar to: **"Adaptive ETA cannot be opened because it is from an unidentified developer."**.
 To open the app,
 1. Open **System Settings** on your Mac.
 2. Click on **"Privacy & Security"** in the sidebar *(has a hand icon)*.
