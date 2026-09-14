@@ -15,7 +15,7 @@ Adaptive ETA is being developed for **Windows, Linux, and macOS**.
 <TODO: put installation instructions here when finalized>
 ## macOS
 <TODO: put installation instructions here when finalized>
-### MUST READ: For macOS users
+### IMPORTANT: For macOS users
 When installing, macOS will prompt a warning similar to: **"Adaptive ETA cannot be opened because it is from an unidentified developer."**
 To open the app,
 1. Open **System Settings** on your Mac.
