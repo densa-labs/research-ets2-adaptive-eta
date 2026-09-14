@@ -1,5 +1,6 @@
 use adaptive_eta_core::{
-    CalibrationEngine, EngineInput, EngineOutput, EstimatorState, EstimatorView, SampleOutcome,
+    CalibrationEngine, CalibrationSnapshot, EngineConfig, EngineInput, EngineOutput,
+    EstimatorState, EstimatorView, SampleOutcome, SnapshotValidationError,
 };
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +68,26 @@ pub struct DeterministicPipeline {
 }
 
 impl DeterministicPipeline {
+    /// Starts a pipeline with restored durable estimator evidence. Adapter and
+    /// calibration-window state always start clean.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot is invalid or unsupported.
+    pub fn from_calibration_snapshot(
+        snapshot: CalibrationSnapshot,
+    ) -> Result<Self, SnapshotValidationError> {
+        Ok(Self {
+            engine: CalibrationEngine::from_snapshot(EngineConfig::default(), snapshot)?,
+            ..Self::default()
+        })
+    }
+
+    #[must_use]
+    pub const fn calibration_snapshot(&self) -> CalibrationSnapshot {
+        self.engine.estimator().snapshot()
+    }
+
     #[must_use]
     pub fn process(&mut self, record_index: usize, input: crate::raw::RawInput) -> ReplayStep {
         self.summary.records += 1;

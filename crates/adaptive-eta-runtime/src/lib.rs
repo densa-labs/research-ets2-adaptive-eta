@@ -1,3 +1,8 @@
+pub mod profile;
+
+use adaptive_eta_core::{
+    CalibrationSnapshot, EngineOutput, SampleOutcome, SnapshotValidationError,
+};
 use telemetry_adapter::{DeterministicPipeline, RawInput, ReplayReport, ReplayStep, ReplaySummary};
 use telemetry_transport::{ContinuityDiagnostic, ContinuityTracker, Envelope};
 
@@ -18,6 +23,9 @@ pub struct RuntimeDiagnostics {
 pub struct IngestResult {
     pub diagnostic: Option<ContinuityDiagnostic>,
     pub steps: Vec<ReplayStep>,
+    /// Present exactly when this ingest accepted calibration evidence and the
+    /// durable estimator state changed.
+    pub durable_snapshot: Option<CalibrationSnapshot>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -48,6 +56,23 @@ impl RuntimeProcessor {
         }
     }
 
+    /// Starts with restored durable estimator evidence while all transport,
+    /// adapter, timing, and sampling state remains fresh.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot is invalid or unsupported.
+    pub fn from_calibration_snapshot(
+        collect_trace: bool,
+        snapshot: CalibrationSnapshot,
+    ) -> Result<Self, SnapshotValidationError> {
+        Ok(Self {
+            pipeline: DeterministicPipeline::from_calibration_snapshot(snapshot)?,
+            trace_steps: collect_trace.then(Vec::new),
+            ..Self::default()
+        })
+    }
+
     #[must_use]
     pub fn ingest(&mut self, envelope: Envelope) -> IngestResult {
         self.diagnostics.received_packets = self.diagnostics.received_packets.saturating_add(1);
@@ -65,9 +90,15 @@ impl RuntimeProcessor {
             self.observe_source(input);
             steps.push(self.process(input));
         }
+        let durable_snapshot = steps
+            .iter()
+            .flat_map(|step| &step.core_outputs)
+            .any(is_accepted_sample)
+            .then(|| self.pipeline.calibration_snapshot());
         IngestResult {
             diagnostic: outcome.diagnostic,
             steps,
+            durable_snapshot,
         }
     }
 
@@ -153,6 +184,17 @@ impl RuntimeProcessor {
             None => {}
         }
     }
+}
+
+fn is_accepted_sample(output: &EngineOutput) -> bool {
+    matches!(
+        output,
+        EngineOutput::Sample(decision)
+            if matches!(
+                decision.outcome,
+                SampleOutcome::AcceptedUnchanged { .. } | SampleOutcome::AcceptedBounded { .. }
+            )
+    )
 }
 
 #[cfg(test)]

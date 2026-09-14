@@ -1,7 +1,7 @@
 use crate::diagnostics::{
     BoundaryDiagnostic, EngineOutput, RejectionReason, SampleDecision, SampleMetrics, SampleOutcome,
 };
-use crate::estimator::EstimatorState;
+use crate::estimator::{CalibrationSnapshot, EstimatorState, SnapshotValidationError};
 use crate::lifecycle::{BoundaryReason, LifecycleEvent};
 use crate::telemetry::{EngineInput, TelemetryFrame};
 
@@ -83,6 +83,21 @@ impl CalibrationEngine {
             source_disconnected: false,
             awaiting_movement_after_afk: false,
         }
+    }
+
+    /// Creates an engine with durable estimator evidence and clean transient
+    /// sampling/lifecycle state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the durable snapshot is invalid or unsupported.
+    pub fn from_snapshot(
+        config: EngineConfig,
+        snapshot: CalibrationSnapshot,
+    ) -> Result<Self, SnapshotValidationError> {
+        let mut engine = Self::new(config);
+        engine.estimator = EstimatorState::from_snapshot(snapshot)?;
+        Ok(engine)
     }
 
     #[must_use]

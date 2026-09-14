@@ -22,7 +22,10 @@ pub use diagnostics::{
     BoundaryDiagnostic, EngineOutput, RejectionReason, SampleDecision, SampleMetrics,
     SampleOutcome, UpdateDiagnostic,
 };
-pub use estimator::{EstimatorState, EstimatorView};
+pub use estimator::{
+    CALIBRATION_MODEL_VERSION, CalibrationSnapshot, EstimatorState, EstimatorView,
+    SnapshotValidationError,
+};
 pub use lifecycle::{BoundaryReason, LifecycleEvent};
 pub use sampler::{CalibrationEngine, EngineConfig};
 pub use telemetry::{EngineInput, TelemetryFrame};

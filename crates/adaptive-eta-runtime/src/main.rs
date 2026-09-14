@@ -10,6 +10,10 @@ use std::time::{Duration, Instant};
 #[cfg(any(unix, windows))]
 use adaptive_eta_runtime::RuntimeProcessor;
 #[cfg(any(unix, windows))]
+use adaptive_eta_runtime::profile::{
+    PersistenceWorker, ProfileDiagnostic, ProfileState, ProfileStore, resolve_current_profile_path,
+};
+#[cfg(any(unix, windows))]
 use telemetry_adapter::{LiveTrace, encode_live_trace};
 #[cfg(any(unix, windows))]
 use telemetry_transport::{Endpoint, ProtocolError, ReceiveError, Receiver};
@@ -27,12 +31,36 @@ fn main() {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trace_path = parse_trace_path()?;
     install_signal_handlers();
+    let (mut runtime, profile_store, writes_allowed) = match resolve_current_profile_path() {
+        Ok(path) => {
+            let store = ProfileStore::new(path);
+            let loaded = store.load();
+            report_profile_diagnostic(loaded.diagnostic);
+            let runtime = match loaded.state {
+                ProfileState::Loaded(snapshot) => {
+                    RuntimeProcessor::from_calibration_snapshot(trace_path.is_some(), snapshot)?
+                }
+                ProfileState::Fresh | ProfileState::Degraded => {
+                    RuntimeProcessor::new(trace_path.is_some())
+                }
+            };
+            (runtime, Some(store), loaded.writes_allowed)
+        }
+        Err(error) => {
+            eprintln!("profile: degraded; user data directory unavailable: {error:?}");
+            (RuntimeProcessor::new(trace_path.is_some()), None, false)
+        }
+    };
+    let profile_writer = profile_store.filter(|_| writes_allowed).and_then(|store| {
+        PersistenceWorker::spawn(store)
+            .map_err(|error| eprintln!("profile: degraded; writer unavailable: {:?}", error.kind()))
+            .ok()
+    });
     let endpoint = Endpoint::for_current_user()?;
     let mut receiver = Receiver::bind(endpoint)?;
     receiver.set_read_timeout(Some(Duration::from_secs(1)))?;
     println!("waiting for telemetry endpoint={}", receiver.endpoint());
 
-    let mut runtime = RuntimeProcessor::new(trace_path.is_some());
     let mut receiving = false;
     let mut last_status = Instant::now();
     while !SHUTDOWN.load(Ordering::Relaxed) {
@@ -43,12 +71,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(diagnostic) = result.diagnostic {
                     eprintln!("transport continuity {diagnostic:?}");
                 }
+                if let Some(snapshot) = result.durable_snapshot
+                    && let Some(writer) = &profile_writer
+                {
+                    writer.request_save(snapshot);
+                }
+                report_writer_diagnostics(profile_writer.as_ref());
                 if last_status.elapsed() >= Duration::from_secs(1) {
                     print_status(runtime.snapshot());
                     last_status = Instant::now();
                 }
             }
             Err(ReceiveError::Io(error)) if is_timeout(&error) => {
+                report_writer_diagnostics(profile_writer.as_ref());
                 if receiving {
                     println!("runtime idle; waiting for telemetry");
                     receiving = false;
@@ -75,8 +110,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::fs::write(&path, encoded)?;
         println!("developer transport trace written path={}", path.display());
     }
+    if let Some(writer) = profile_writer
+        && !writer.shutdown(Duration::from_secs(5))
+    {
+        eprintln!("profile: degraded; writer did not finish within shutdown timeout");
+    }
     println!("runtime shutdown cleanly");
     Ok(())
+}
+
+#[cfg(any(unix, windows))]
+fn report_writer_diagnostics(writer: Option<&PersistenceWorker>) {
+    if let Some(writer) = writer {
+        for diagnostic in writer.diagnostics() {
+            if diagnostic != ProfileDiagnostic::ProfileSaved {
+                report_profile_diagnostic(diagnostic);
+            }
+        }
+    }
+}
+
+#[cfg(any(unix, windows))]
+fn report_profile_diagnostic(diagnostic: ProfileDiagnostic) {
+    match diagnostic {
+        ProfileDiagnostic::ProfileLoaded => println!("profile: loaded"),
+        ProfileDiagnostic::ProfileNotFound => println!("profile: fresh"),
+        ProfileDiagnostic::ProfileSaved => {}
+        other => eprintln!("profile: degraded; {other:?}"),
+    }
 }
 
 #[cfg(any(unix, windows))]
