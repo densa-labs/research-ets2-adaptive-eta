@@ -76,6 +76,11 @@ impl TelemetryAdapter {
                 self.navigation_available = None;
                 core_event(LifecycleEvent::TimerRestart)
             }
+            RawInput::TimingDiscontinuity => {
+                self.clock.reset();
+                self.navigation_available = None;
+                core_event(LifecycleEvent::TimingDiscontinuity)
+            }
             RawInput::LoadOrRestart => core_event(LifecycleEvent::LoadOrRestart),
             RawInput::JobChanged => core_event(LifecycleEvent::JobChanged),
             RawInput::JobEnded => core_event(LifecycleEvent::JobEnded),

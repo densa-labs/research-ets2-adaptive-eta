@@ -27,12 +27,16 @@ pub struct RawFrame {
     rename_all_fields = "camelCase"
 )]
 pub enum RawInput {
-    SourceConnected { source_epoch: u64 },
+    SourceConnected {
+        source_epoch: u64,
+    },
     SourceDisconnected,
     Frame(RawFrame),
     Paused,
     Started,
     TimerRestart,
+    /// An upstream adapter or transport could not safely bridge an interval.
+    TimingDiscontinuity,
     LoadOrRestart,
     JobChanged,
     JobEnded,

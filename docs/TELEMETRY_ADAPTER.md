@@ -1,10 +1,11 @@
 # Normalized telemetry adapter and replay harness
 
 This crate connects raw-ish SCS telemetry concepts to `adaptive-eta-core` and
-is shared by offline replay and the developer live-integration spike. It is not
-the production plugin protocol. The SCS callback mapping, capture activation,
-and exact live/replay comparison workflow are documented in
-`LIVE_ADAPTER_SPIKE.md`.
+is shared by offline replay and the production companion runtime. The separate
+`telemetry-transport` crate carries this crate's canonical `RawInput` values;
+the adapter itself does not own the wire protocol. The SCS callback mapping,
+capture activation, and exact live/replay comparison workflow are documented
+in `LIVE_ADAPTER_SPIKE.md`.
 
 ## Adapter contract
 
@@ -49,6 +50,11 @@ Timer restart, timestamp regression, unavailable interval scale, invalid scale,
 or an advancing pause-aware timestamp while explicitly paused emits a typed
 clock diagnostic and a hard normalized boundary. No delta is guessed across
 that interval. Pause events themselves add no time to either active clock.
+
+An upstream `TimingDiscontinuity`—including a detected production-transport
+gap—resets the interval clock and navigation availability and emits the same
+existing core timing boundary. The next frame establishes a fresh baseline, so
+no interval or calibration window can span missing transport data.
 
 ## JSONL recording format
 

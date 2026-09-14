@@ -171,6 +171,7 @@ const fn input_identity(input: RawInput) -> (Option<u64>, Option<u64>) {
         | RawInput::Paused
         | RawInput::Started
         | RawInput::TimerRestart
+        | RawInput::TimingDiscontinuity
         | RawInput::LoadOrRestart
         | RawInput::JobChanged
         | RawInput::JobEnded

@@ -97,6 +97,10 @@ fn lifecycle_events_map_without_calibration_side_effects() {
         (RawInput::Paused, LifecycleEvent::Paused),
         (RawInput::Started, LifecycleEvent::Started),
         (RawInput::TimerRestart, LifecycleEvent::TimerRestart),
+        (
+            RawInput::TimingDiscontinuity,
+            LifecycleEvent::TimingDiscontinuity,
+        ),
         (RawInput::LoadOrRestart, LifecycleEvent::LoadOrRestart),
         (RawInput::JobChanged, LifecycleEvent::JobChanged),
         (RawInput::JobEnded, LifecycleEvent::JobEnded),

@@ -99,17 +99,23 @@ impl DeterministicPipeline {
 
     #[must_use]
     pub fn report(&self, steps: Vec<ReplayStep>) -> ReplayReport {
-        let mut summary = self.summary;
-        summary.final_estimator = self.engine.estimator().view();
-        summary.adaptive_eta_sec = self
-            .latest_game_eta_sec
-            .and_then(|game_eta| self.engine.estimator().adaptive_eta_sec(game_eta));
+        let summary = self.summary();
         ReplayReport {
             summary,
             steps,
             adapter_diagnostics: self.adapter_diagnostics.clone(),
             final_estimator_state: self.engine.estimator().clone(),
         }
+    }
+
+    #[must_use]
+    pub fn summary(&self) -> ReplaySummary {
+        let mut summary = self.summary;
+        summary.final_estimator = self.engine.estimator().view();
+        summary.adaptive_eta_sec = self
+            .latest_game_eta_sec
+            .and_then(|game_eta| self.engine.estimator().adaptive_eta_sec(game_eta));
+        summary
     }
 }
 

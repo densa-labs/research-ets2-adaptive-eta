@@ -1,14 +1,16 @@
-//! Developer live-integration spike for Adaptive ETA.
+//! Production SCS telemetry producer for Adaptive ETA.
 //!
-//! The SCS-facing layer assembles one raw snapshot per frame and immediately
-//! routes every lifecycle/frame input through the same deterministic adapter
-//! and calibration pipeline used by offline replay. An opt-in developer marker
-//! enables schema-v1 JSONL capture plus a structured live decision trace.
+//! The SCS-facing layer assembles the validated `RawInput` stream and publishes
+//! each input through a bounded non-blocking local datagram. Calibration runs in
+//! the separate companion runtime. The `developer-parity` feature retains the
+//! opt-in in-process capture and deterministic observer used for validation.
 
 mod bridge;
+#[cfg(feature = "developer-parity")]
 mod capture;
 
 use bridge::{BridgeDiagnostic, ChannelKind, FrameStart, LiveFrameAssembler};
+#[cfg(feature = "developer-parity")]
 use capture::DeveloperCapture;
 use scs_sdk_plugin::sdk::{
     ChannelFlags, TelemetryApiVersion, channels, configuration, game, gameplay,
@@ -17,7 +19,10 @@ use scs_sdk_plugin::{
     ChannelUpdate, Game, GameCompatibility, PluginCompatibility, PluginContext, PluginMetadata,
     PluginResult, TelemetryEvent, TelemetryEventKind, TelemetryPlugin, export_plugin,
 };
-use telemetry_adapter::{AdapterOutput, DeterministicPipeline, RawInput};
+use telemetry_adapter::RawInput;
+#[cfg(feature = "developer-parity")]
+use telemetry_adapter::{AdapterOutput, DeterministicPipeline};
+use telemetry_transport::{Endpoint, Publisher};
 
 static SUPPORTED_GAMES: [GameCompatibility; 1] = [GameCompatibility::new(
     Game::EuroTruckSimulator2,
@@ -27,11 +32,18 @@ static SUPPORTED_GAMES: [GameCompatibility; 1] = [GameCompatibility::new(
 #[derive(Debug)]
 struct TelemetrySpike {
     assembler: LiveFrameAssembler,
+    publisher: Option<Publisher>,
+    #[cfg(feature = "developer-parity")]
     pipeline: DeterministicPipeline,
+    #[cfg(feature = "developer-parity")]
     capture: Option<DeveloperCapture>,
+    #[cfg(feature = "developer-parity")]
     callback_ordinal: u64,
+    #[cfg(feature = "developer-parity")]
     input_ordinal: usize,
+    #[cfg(feature = "developer-parity")]
     capture_failure_reported: bool,
+    #[cfg(feature = "developer-parity")]
     callback_trace_failure_reported: bool,
     paused: bool,
 }
@@ -40,11 +52,18 @@ impl Default for TelemetrySpike {
     fn default() -> Self {
         Self {
             assembler: LiveFrameAssembler::default(),
+            publisher: None,
+            #[cfg(feature = "developer-parity")]
             pipeline: DeterministicPipeline::default(),
+            #[cfg(feature = "developer-parity")]
             capture: None,
+            #[cfg(feature = "developer-parity")]
             callback_ordinal: 0,
+            #[cfg(feature = "developer-parity")]
             input_ordinal: 0,
+            #[cfg(feature = "developer-parity")]
             capture_failure_reported: false,
+            #[cfg(feature = "developer-parity")]
             callback_trace_failure_reported: false,
             paused: true,
         }
@@ -53,6 +72,7 @@ impl Default for TelemetrySpike {
 
 impl TelemetrySpike {
     fn process_input(&mut self, context: &PluginContext<'_>, input: RawInput) {
+        #[cfg(feature = "developer-parity")]
         if let Some(capture) = &mut self.capture
             && let Err(error) = capture.record_input(input)
             && !self.capture_failure_reported
@@ -63,28 +83,36 @@ impl TelemetrySpike {
             ));
         }
 
-        let step = self.pipeline.process(self.input_ordinal, input);
-        self.input_ordinal += 1;
-        for output in &step.adapter_outputs {
-            if let AdapterOutput::Diagnostic(diagnostic) = output {
-                context.warning(format_args!(
-                    "[adaptive-eta-live] adapterDiagnostic input={} detail={:?}",
-                    step.record_index + 1,
-                    diagnostic
+        #[cfg(feature = "developer-parity")]
+        {
+            let step = self.pipeline.process(self.input_ordinal, input);
+            self.input_ordinal += 1;
+            for output in &step.adapter_outputs {
+                if let AdapterOutput::Diagnostic(diagnostic) = output {
+                    context.warning(format_args!(
+                        "[adaptive-eta-live] adapterDiagnostic input={} detail={:?}",
+                        step.record_index + 1,
+                        diagnostic
+                    ));
+                }
+            }
+            for output in &step.core_outputs {
+                context.message(format_args!(
+                    "[adaptive-eta-live] coreDecision input={} detail={output:?}",
+                    step.record_index + 1
                 ));
             }
+            if let Some(capture) = &mut self.capture {
+                capture.record_step(step);
+            }
         }
-        for output in &step.core_outputs {
-            context.message(format_args!(
-                "[adaptive-eta-live] coreDecision input={} detail={output:?}",
-                step.record_index + 1
-            ));
-        }
-        if let Some(capture) = &mut self.capture {
-            capture.record_step(step);
+
+        if let Some(publisher) = &mut self.publisher {
+            let _ = publisher.publish(input);
         }
     }
 
+    #[cfg(feature = "developer-parity")]
     fn trace_callback(&mut self, context: &PluginContext<'_>, detail: &str) {
         self.callback_ordinal = self.callback_ordinal.wrapping_add(1);
         if let Some(capture) = &mut self.capture
@@ -98,10 +126,19 @@ impl TelemetrySpike {
         }
     }
 
+    #[cfg(not(feature = "developer-parity"))]
+    fn trace_callback(&mut self, _: &PluginContext<'_>, _: &str) {}
+
+    #[cfg(feature = "developer-parity")]
     fn callback_trace_enabled(&self) -> bool {
         self.capture
             .as_ref()
             .is_some_and(DeveloperCapture::callback_trace_enabled)
+    }
+
+    #[cfg(not(feature = "developer-parity"))]
+    const fn callback_trace_enabled(&self) -> bool {
+        false
     }
 
     fn bridge_diagnostic(context: &PluginContext<'_>, diagnostic: BridgeDiagnostic) {
@@ -165,13 +202,17 @@ impl TelemetrySpike {
         if let Some(value_text) = value_text {
             self.trace_callback(context, &format!("channel {channel_name}={value_text}"));
         } else {
-            self.callback_ordinal = self.callback_ordinal.wrapping_add(1);
+            #[cfg(feature = "developer-parity")]
+            {
+                self.callback_ordinal = self.callback_ordinal.wrapping_add(1);
+            }
         }
         if let Some(diagnostic) = diagnostic {
             Self::bridge_diagnostic(context, diagnostic);
         }
     }
 
+    #[cfg(feature = "developer-parity")]
     fn finish_capture(&mut self, context: &PluginContext<'_>) {
         let report = self.pipeline.report(Vec::new());
         let Some(capture) = self.capture.take() else {
@@ -188,12 +229,15 @@ impl TelemetrySpike {
             )),
         }
     }
+
+    #[cfg(not(feature = "developer-parity"))]
+    fn finish_capture(&mut self, _: &PluginContext<'_>) {}
 }
 
 impl TelemetryPlugin for TelemetrySpike {
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata::new(
-            "Adaptive ETA Live Integration Spike",
+            "Adaptive ETA Telemetry Transport",
             env!("CARGO_PKG_VERSION"),
         )
     }
@@ -203,21 +247,43 @@ impl TelemetryPlugin for TelemetrySpike {
     }
 
     fn initialize(&mut self, context: &mut PluginContext<'_>) -> PluginResult {
-        self.pipeline = DeterministicPipeline::default();
-        self.callback_ordinal = 0;
-        self.input_ordinal = 0;
-        self.capture_failure_reported = false;
-        self.callback_trace_failure_reported = false;
-        self.paused = true;
-        self.capture = match DeveloperCapture::open_if_enabled() {
-            Ok(capture) => capture,
+        self.publisher = match Endpoint::for_current_user().and_then(Publisher::new) {
+            Ok(publisher) => {
+                context.message(format_args!(
+                    "[adaptive-eta] transportReady sender={} endpoint={}",
+                    publisher.sender(),
+                    Endpoint::for_current_user().map_or_else(
+                        |_| "unavailable".to_owned(),
+                        |endpoint| endpoint.socket_path().display().to_string()
+                    )
+                ));
+                Some(publisher)
+            }
             Err(error) => {
                 context.error(format_args!(
-                    "[adaptive-eta-live] diagnostic kind=captureOpenFailure error={error}"
+                    "[adaptive-eta] transportUnavailable error={error}"
                 ));
                 None
             }
         };
+        #[cfg(feature = "developer-parity")]
+        {
+            self.pipeline = DeterministicPipeline::default();
+            self.callback_ordinal = 0;
+            self.input_ordinal = 0;
+            self.capture_failure_reported = false;
+            self.callback_trace_failure_reported = false;
+            self.paused = true;
+            self.capture = match DeveloperCapture::open_if_enabled() {
+                Ok(capture) => capture,
+                Err(error) => {
+                    context.error(format_args!(
+                        "[adaptive-eta-live] diagnostic kind=captureOpenFailure error={error}"
+                    ));
+                    None
+                }
+            };
+        }
 
         context.subscribe_event(TelemetryEventKind::FrameStart)?;
         context.subscribe_event(TelemetryEventKind::FrameEnd)?;
@@ -234,6 +300,7 @@ impl TelemetryPlugin for TelemetrySpike {
         context.subscribe_with_flags(channels::truck::NAVIGATION_DISTANCE, flags)?;
         context.subscribe_with_flags(channels::truck::NAVIGATION_TIME, flags)?;
 
+        #[cfg(feature = "developer-parity")]
         if let Some(capture) = &self.capture {
             let paths = capture.paths();
             context.message(format_args!(
@@ -252,7 +319,7 @@ impl TelemetryPlugin for TelemetrySpike {
         }
         let connected = self.assembler.source_connected();
         self.process_input(context, connected);
-        context.message(format_args!("[adaptive-eta-live] initialized"));
+        context.message(format_args!("[adaptive-eta] initialized"));
         Ok(())
     }
 
@@ -272,7 +339,10 @@ impl TelemetryPlugin for TelemetrySpike {
                         frame.timer_restarted()
                     ));
                 } else {
-                    self.callback_ordinal = self.callback_ordinal.wrapping_add(1);
+                    #[cfg(feature = "developer-parity")]
+                    {
+                        self.callback_ordinal = self.callback_ordinal.wrapping_add(1);
+                    }
                 }
                 if let Some(diagnostic) = self.assembler.frame_start(FrameStart {
                     paused_simulation_time_us: frame.paused_simulation_time(),
@@ -317,7 +387,10 @@ impl TelemetryPlugin for TelemetrySpike {
                 if self.callback_trace_enabled() {
                     self.trace_callback(context, &format!("configuration {id}"));
                 } else {
-                    self.callback_ordinal = self.callback_ordinal.wrapping_add(1);
+                    #[cfg(feature = "developer-parity")]
+                    {
+                        self.callback_ordinal = self.callback_ordinal.wrapping_add(1);
+                    }
                 }
                 if configuration_event.is(configuration::ids::JOB) {
                     let input = if configuration_event.has_attributes() {
@@ -333,7 +406,10 @@ impl TelemetryPlugin for TelemetrySpike {
                 if self.callback_trace_enabled() {
                     self.trace_callback(context, &format!("gameplay {id}"));
                 } else {
-                    self.callback_ordinal = self.callback_ordinal.wrapping_add(1);
+                    #[cfg(feature = "developer-parity")]
+                    {
+                        self.callback_ordinal = self.callback_ordinal.wrapping_add(1);
+                    }
                 }
                 let input = if gameplay_event.is(gameplay::events::PLAYER_USE_FERRY) {
                     Some(RawInput::FerryUsed)
@@ -357,8 +433,25 @@ impl TelemetryPlugin for TelemetrySpike {
         self.trace_callback(context, "source_disconnected");
         self.process_input(context, RawInput::SourceDisconnected);
         self.finish_capture(context);
-        self.pipeline = DeterministicPipeline::default();
-        context.message(format_args!("[adaptive-eta-live] shutdown"));
+        if let Some(publisher) = self.publisher.take() {
+            let counters = publisher.counters();
+            context.message(format_args!(
+                "[adaptive-eta] transportSummary attempted={} sent={} bytes={} maxPacket={} wouldBlock={} receiverAbsent={} serializationFailures={} otherFailures={}",
+                counters.attempted,
+                counters.successful,
+                counters.successful_bytes,
+                counters.maximum_packet_bytes,
+                counters.would_block_drops,
+                counters.receiver_absent_drops,
+                counters.serialization_failures,
+                counters.other_failures,
+            ));
+        }
+        #[cfg(feature = "developer-parity")]
+        {
+            self.pipeline = DeterministicPipeline::default();
+        }
+        context.message(format_args!("[adaptive-eta] shutdown"));
     }
 }
 

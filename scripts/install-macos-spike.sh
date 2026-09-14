@@ -19,7 +19,7 @@ fi
 
 if [[ -e "$destination" ]]; then
   printf 'Refusing to overwrite existing file: %s\n' "$destination" >&2
-  printf 'Remove that exact prior spike artifact manually before reinstalling.\n' >&2
+  printf 'Remove that exact prior plugin artifact manually before reinstalling.\n' >&2
   exit 1
 fi
 
@@ -30,5 +30,4 @@ xattr -d com.apple.quarantine "$destination" 2>/dev/null || true
 codesign --force --sign - "$destination"
 "$repo_root/scripts/verify-macos-spike.sh" "$destination"
 
-printf 'Installed spike plugin: %s\n' "$destination"
-
+printf 'Installed production telemetry plugin: %s\n' "$destination"

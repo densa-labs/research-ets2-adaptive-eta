@@ -1,8 +1,12 @@
 # Live adapter integration and replay parity
 
-This developer spike connects the real SCS callback stream to the existing
-`RawInput -> TelemetryAdapter -> CalibrationEngine` path. It does not add a
-production transport or persistent player data.
+This document records the validated developer spike that connected the real
+SCS callback stream to the existing
+`RawInput -> TelemetryAdapter -> CalibrationEngine` path. Production builds now
+publish that same `RawInput` stream to the companion runtime; build the plugin
+with `--features developer-parity` to retain this in-process observer and its
+capture tooling for exact transport parity validation. Persistent player data
+remains out of scope.
 
 ## Callback bridge contract
 

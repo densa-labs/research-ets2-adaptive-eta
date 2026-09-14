@@ -10,12 +10,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "adaptive-eta-runtime"
+version = "0.1.0"
+dependencies = [
+ "adaptive-eta-core",
+ "telemetry-adapter",
+ "telemetry-transport",
+]
+
+[[package]]
 name = "ets2-adaptive-eta-telemetry-spike"
 version = "0.1.0"
 dependencies = [
  "adaptive-eta-core",
  "scs-sdk-plugin",
  "telemetry-adapter",
+ "telemetry-transport",
 ]
 
 [[package]]
@@ -146,6 +156,13 @@ dependencies = [
  "adaptive-eta-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "telemetry-transport"
+version = "0.1.0"
+dependencies = [
+ "telemetry-adapter",
 ]
 
 [[package]]
