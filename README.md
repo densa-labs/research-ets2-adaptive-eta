@@ -1,7 +1,7 @@
-# Adaptive ETA
 # IMPORTANT:
 **This repository is now an archive and serves as research for the current project, [Better ETA](https://github.com/densa-labs/ets2-better-eta)**
 
+# Adaptive ETA
 **Adaptive ETA** is a **mod** for **Euro Truck Simulator 2** that **learns your driving patterns** and **adjusts the Route Advisor ETA** to **match your driving style**, giving you a **more accurate travel time**.
 
 Instead of relying on ETS2's generic travel-time assumptions, Adaptive ETA gradually learns from **your own trips** and produces a **personalized arrival estimate**.
